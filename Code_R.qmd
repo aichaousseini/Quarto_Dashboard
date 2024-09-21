@@ -1,0 +1,386 @@
+---
+title: "Dashboard Texas Housing"
+format: 
+  dashboard:
+    df-print: paged
+orientation: columns
+server: shiny
+---
+
+
+```{r}
+#| context: setup
+#| echo: false
+#| message: false
+require(dplyr)
+require(ggplot2)
+require(plotly)
+require(tidyr)
+require(shiny)
+
+```
+
+
+# Data
+
+## column {width = 30%}
+
+This data represents information about the housing market in Texas provided by the TAMU real estate center. The data frame contains 8602 observations and 9 variables: city Name of MLS area, year,month,date Date,sales Number of sales volume Total value of sales, median Median sale price, listings Total active listings, inventory "Months inventory": amount of time it would take to sell all current listings at current pace of sales.
+
+
+```{r}
+#| title: donnees txhousing
+tableOutput(
+ outputId = "txhousingOutputId"
+)
+
+```
+
+
+# Txhousing Market
+
+```{r}
+texas <- ggplot2::txhousing
+
+texas_sum <- txhousing %>% group_by(year,month) %>% 
+  summarise(sales = sum(sales,na.rm = TRUE),
+            volume = sum(volume,na.rm = TRUE),
+            median = sum(median,na.rm = TRUE),
+            listings = sum(listings,na.rm = TRUE),
+            inventory = sum(inventory,na.rm = TRUE))
+
+texas_sum <- texas_sum %>% ungroup()
+
+library(lubridate)
+
+texas_sum$date <- ymd(paste0(texas_sum$year,"-",texas_sum$month,"-1"))
+
+
+# update indicator variable menu
+updatemenus <- list(
+  list(
+    active = 0,
+    x = -.125,
+    type= 'buttons',
+    buttons = list(
+      list(
+        label = "Sales",
+        method = "update",
+        args = list(list(visible = c(TRUE, "legendonly", "legendonly", 
+                                     "legendonly", "legendonly" )))),
+      list(
+        label = "Volume",
+        method = "update",
+        args = list(list(visible = c("legendonly", TRUE, "legendonly", 
+                                     "legendonly", "legendonly")))),
+      list(
+        label = "Median",
+        method = "update",
+        args = list(list(visible = c("legendonly", "legendonly", TRUE, 
+                                     "legendonly", "legendonly")))),
+      list(
+        label = "Listings",
+        method = "update",
+        args = list(list(visible = c("legendonly", "legendonly", "legendonly", 
+                                     TRUE, "legendonly")))),      
+      list(
+        label = "Inventory",
+        method = "update",
+        args = list(list(visible = c("legendonly", "legendonly", "legendonly", 
+                                     "legendonly", TRUE))))
+    )
+  )
+)
+
+p11 <- plot_ly(data = texas_sum) %>% 
+  
+  add_lines(x=~date, y=~sales, name = "Sales", visible = "TRUE") %>%
+  add_lines(x=~date, y=~volume, name = "Volume", visible = "legendonly") %>%
+  add_lines(x=~date, y=~median, name = "Median", visible = "legendonly") %>%
+  add_lines(x=~date, y=~listings, name = "Listings", visible = "legendonly") %>%
+  add_lines(x=~date, y=~inventory, name = "Inventory", visible = "legendonly") %>%
+  
+  layout(title = "Texas Housing Market Time Series", showlegend=TRUE,
+         xaxis=list(zeroline = FALSE,title="Date"),
+         yaxis=list(zeroline = FALSE,title="Value"),
+         updatemenus=updatemenus)
+
+p11
+```
+
+
+# Tendence Annuel
+
+## Sidebar {.sidebar}
+
+```{r}
+selectInput(
+ inputId =  "variableInputId",
+  label = "variable",
+  choices = c('sales','median','listings','inventory')
+)
+```
+
+
+```{r}
+require(ggplot2)
+selectInput(inputId = 'yearinputid2',label = 'year',choices = unique(txhousing['year']))
+
+```
+
+
+## row
+
+```{r}
+#| title: tendence annuel pour une variable choisie 
+plotlyOutput("yearoutput")
+```
+
+
+
+# Tendence mensuel 
+
+## Sidebar {.sidebar}
+
+```{r}
+selectInput(
+ inputId =  "variableInputId",
+  label = "variable",
+  choices = c('sales','median','listings','inventory')
+)
+```
+
+```{r}
+selectInput(inputId = "monthinputid2",label = "month",choices = unique(txhousing$month))
+```
+
+## row
+
+```{r}
+#| title: evolution mensuelle 
+plotlyOutput("monthoutput")
+```
+
+
+# Graphic
+
+
+## Sidebar {.sidebar}
+
+
+```{r}
+selectInput(
+ inputId =  "variableInputId",
+  label = "variable",
+  choices = c('sales','median','listings','inventory')
+)
+```
+
+## row
+
+```{r}
+plotlyOutput(
+  outputId = "histogramOutputId"
+)
+
+plotOutput(
+  outputId = "lineOutputId"
+)
+
+```
+
+## row
+
+```{r}
+plotlyOutput(
+outputId= "boxplotOutputId"
+)
+```
+
+
+
+# Analyse bivariee 
+
+## Sidebar {.sidebar}
+
+
+```{r}
+selectInput(
+ inputId =  "XInputId",
+  label = "X",
+  choices = c('sales','median','listings','inventory')
+)
+```
+
+
+```{r}
+selectInput(
+ inputId =  "YInputId",
+  label = "Y",
+  choices = c('sales','median','listings','inventory')
+)
+```
+
+
+##
+
+```{r}
+plotlyOutput(
+outputId= "cityOutputId"
+)
+
+```
+##
+
+
+```{r}
+plotlyOutput(
+outputId= "scaterOutputId"
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#| context: server
+
+output$txhousingOutputId <- renderTable(
+  {
+    txhousing%>%
+      head()
+  }
+)
+
+output$histogramOutputId <- renderPlotly({
+  variable = input$variableInputId
+  
+  (txhousing %>%
+    ggplot(mapping = aes(x = !!rlang::sym(variable))) +
+    geom_histogram(fill = "blue")
+)%>%
+    ggplotly()
+  
+}
+)
+
+
+output$lineOutputId <- renderPlot({
+  
+  variable = input$variableInputId
+data = txhousing %>%
+   group_by(year) %>%
+   summarise(
+    Y= sum(!!rlang::sym(variable),na.rm = TRUE),
+    )
+ggplot(data, aes(x = year, y = Y))+
+  geom_line(color = "coral", size = 1) +
+  geom_point(color = "black")+
+  theme_minimal()+
+  labs(title = "tendence des variables  entre 2000 et 2015")
+})
+
+
+output$boxplotOutputId <- renderPlotly({
+  
+  variable = input$variableInputId
+
+( 
+ggplot(txhousing, aes(x=factor(month), y=!!rlang::sym(variable))) + 
+  geom_boxplot(aes(color = 'blue'))
+)%>%
+  ggplotly()
+}
+)
+
+#bivarié
+
+output$cityOutputId <- renderPlotly({
+  
+  variable = input$XInputId
+  variable1= input$YInputId
+
+(txhousing %>%
+  filter(year == 2005, month == 7) %>%
+  filter(!is.na(sales), !is.na(median)) %>%
+  ggplot(aes(x= !!rlang::sym(variable), y=!!rlang::sym(variable1),label = city)) +
+  geom_point() +
+  geom_text(nudge_y = 4000, size = 3) +
+  scale_x_log10() +
+  theme_minimal()
+)%>%
+  ggplotly()
+}
+)
+
+
+
+
+output$scaterOutputId <- renderPlotly({
+  
+  variable = input$XInputId
+  variable1= input$YInputId
+
+(
+  ggplot(txhousing, aes(x=!!rlang::sym(variable), y=!!rlang::sym(variable1))) + 
+geom_point(aes(color="blue"))
+)%>%
+  ggplotly()
+}
+)
+
+
+output$yearoutput <-renderPlotly( 
+  {
+    var = input$variableInputId 
+    annee=input$yearinputid2
+   ( txhousing%>%
+       filter(year==annee)%>%
+      dplyr::group_by(month)%>%
+      dplyr::summarise(
+        variable_choisie=sum(!!rlang::sym(var) ,na.rm = TRUE)
+      )%>%
+      ggplot(mapping = aes(x=month,y=variable_choisie))+
+      geom_point(color= 'black')+
+      geom_line(color='coral')+
+      theme_minimal()
+)%>%
+      ggplotly()
+  }
+)
+  
+
+output$monthoutput <- renderPlotly(
+  
+  {
+    var = input$variableInputId 
+    mois=input$monthinputid2
+    (txhousing%>%
+      dplyr::filter(month==mois)%>%
+      group_by(year)%>%
+      summarise(
+        variable_choisie=sum(!!rlang::sym(var),na.rm = TRUE)
+      )%>%
+      ggplot(mapping = aes(x=year,y=variable_choisie))+
+        geom_point(color='black')+
+        geom_line(color='blue')
+    )%>%
+      ggplotly()
+  }
+)
+
+
+
+
+```
+                                    
+
+
+
